@@ -8,19 +8,26 @@ export const useUserStore = defineStore({
   }),
   getters: {
     getToken: (state) => state.token,
-    getUser: (state) => jwt_decode(state.token),
+    // Safely decode the JWT — returns null if token is missing or invalid
+    getUser: (state) => {
+      if (!state.token) return null;
+      try {
+        return jwt_decode(state.token);
+      } catch (e) {
+        console.warn("Invalid JWT token, clearing...");
+        localStorage.removeItem("token");
+        return null;
+      }
+    },
+    isLoggedIn: (state) => !!state.token,
   },
   actions: {
     setToken(token) {
       this.token = token;
-
-      // Save token to local storage
-      localStorage.setItem("token", this.token);
+      localStorage.setItem("token", token);
     },
     removeToken() {
       this.token = null;
-
-      // Delete token from local storage
       localStorage.removeItem("token");
     },
   },

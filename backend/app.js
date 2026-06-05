@@ -16,43 +16,66 @@ var orderRouter = require("./routes/order");
 
 var app = express();
 
-// MongoDB Connection (non-blocking)
-mongoose.connect(process.env.MONGODB_URI)
-.then(() => {
-  console.log('✅ MongoDB Connected Successfully');
-  console.log('📊 Database:', mongoose.connection.name);
-})
-.catch((err) => {
-  console.error('❌ MongoDB Connection Error:', err.message);
-  console.log('⚠️  Server will continue running without database');
-});
-
-// Handle MongoDB connection events
-mongoose.connection.on('connected', () => {
-  console.log('🔗 Mongoose connected to MongoDB');
-});
-
-mongoose.connection.on('error', (err) => {
-  console.error('❌ Mongoose connection error:', err.message);
-});
-
-mongoose.connection.on('disconnected', () => {
-  console.log('🔌 Mongoose disconnected from MongoDB');
-});
-
+// NOTE: MongoDB connection is established in bin/www before this file loads.
 // Set base dir
 global.__basedir = __dirname;
 
+// CORS — allow frontend origins (supports both desktop + mobile browsers)
+const allowedOrigins = [
+  process.env.FRONTEND_URL || 'http://localhost:8000',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:8000',
+  'http://127.0.0.1:5173',
+];
+
 var corsOptions = {
-  origin: 'http://localhost:8000', // Matches the frontend
-  optionsSuccessStatus: 200
-}
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    // In development, allow all origins
+    if (process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
 app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
 
 app.use(logger("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
+
+// Serve uploaded static files
+const publicDir = process.env.PUBLIC_DIR || path.join(__dirname, 'public');
+app.use('/uploads', express.static(path.join(publicDir, 'uploads')));
+
+// DB connection guard — return 503 immediately when MongoDB is not ready
+// instead of letting queries hang indefinitely
+app.use(function checkDB(req, res, next) {
+  // Always allow health check and preflight
+  if (req.path === '/health' || req.method === 'OPTIONS') return next();
+  // readyState: 0=disconnected, 1=connected, 2=connecting, 3=disconnecting
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({
+      success: false,
+      message: 'Database is not connected. Please try again shortly.',
+    });
+  }
+  next();
+});
 
 app.use("/main", mainRouter);
 app.use("/user", userRouter);
@@ -61,6 +84,15 @@ app.use("/order", orderRouter);
 app.use("/seller", sellerRouter);
 app.use("/admin", adminRouter);
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+  });
+});
+
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
   next(createError(404));
@@ -68,15 +100,14 @@ app.use(function (req, res, next) {
 
 // error handler
 app.use(function (err, req, res, next) {
-  // set locals, only providing error in development
   res.locals.message = err.message;
   res.locals.error = req.app.get("env") === "development" ? err : {};
 
-  // render the error page
   res.status(err.status || 500);
   res.json({
+    success: false,
     message: err.message,
-    error: err,
+    error: req.app.get("env") === "development" ? err : {},
   });
 });
 

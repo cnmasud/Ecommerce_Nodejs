@@ -2,71 +2,63 @@
 import { useNotificationStore } from '@/stores/notification'
 import { computed } from 'vue'
 
-const notificationStore = useNotificationStore()
+const store = useNotificationStore()
+const notifications = computed(() => store.activeNotifications)
 
-const notifications = computed(() => notificationStore.activeNotifications)
+const dismiss = (id) => store.remove(id)
 
-const getAlertClass = (type) => {
-  const baseClass = 'alert shadow-lg'
-  switch (type) {
-    case 'success':
-      return `${baseClass} alert-success`
-    case 'error':
-      return `${baseClass} alert-error`
-    case 'warning':
-      return `${baseClass} alert-warning`
-    case 'info':
-      return `${baseClass} alert-info`
-    case 'loading':
-      return `${baseClass} alert-info`
-    default:
-      return baseClass
-  }
+const icons = {
+  success: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>`,
+  error:   `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>`,
+  warning: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>`,
+  info:    `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`,
+  loading: `<svg class="h-5 w-5 flex-shrink-0 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>`,
 }
 
-const getIcon = (type) => {
-  switch (type) {
-    case 'success':
-      return `<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`
-    case 'error':
-      return `<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`
-    case 'warning':
-      return `<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>`
-    case 'info':
-      return `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current flex-shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`
-    case 'loading':
-      return `<svg class="animate-spin h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`
-    default:
-      return ''
-  }
-}
-
-const closeNotification = (id) => {
-  notificationStore.remove(id)
+const colours = {
+  success: 'bg-emerald-500 text-white',
+  error:   'bg-red-500 text-white',
+  warning: 'bg-amber-400 text-gray-900',
+  info:    'bg-blue-500 text-white',
+  loading: 'bg-gray-700 text-white',
 }
 </script>
 
 <template>
-  <div class="toast toast-top toast-end z-50">
+  <!-- Fixed container — top-right on desktop, top-center on mobile -->
+  <div
+    aria-live="polite"
+    class="fixed top-4 right-4 left-4 sm:left-auto sm:w-80 z-[9999] flex flex-col gap-2 pointer-events-none"
+  >
     <TransitionGroup name="toast">
       <div
-        v-for="notification in notifications"
-        :key="notification.id"
-        :class="getAlertClass(notification.type)"
+        v-for="n in notifications"
+        :key="n.id"
+        :class="[
+          'pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl shadow-2xl',
+          colours[n.type] || colours.info
+        ]"
+        role="alert"
       >
-        <div v-html="getIcon(notification.type)"></div>
-        <div class="flex-1">
-          <h3 v-if="notification.title" class="font-bold">
-            {{ notification.title }}
-          </h3>
-          <div class="text-sm">{{ notification.message }}</div>
+        <!-- Icon -->
+        <span class="mt-0.5" v-html="icons[n.type] || icons.info"></span>
+
+        <!-- Message -->
+        <div class="flex-1 min-w-0">
+          <p v-if="n.title" class="font-bold text-sm leading-tight">{{ n.title }}</p>
+          <p class="text-sm leading-snug" :class="n.title ? 'opacity-90' : 'font-medium'">{{ n.message }}</p>
         </div>
+
+        <!-- Close button -->
         <button
-          v-if="notification.closable"
-          @click="closeNotification(notification.id)"
-          class="btn btn-sm btn-circle btn-ghost"
+          v-if="n.closable !== false"
+          @click="dismiss(n.id)"
+          class="flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity ml-1 -mr-1 -mt-0.5 p-1 rounded"
+          aria-label="Dismiss"
         >
-          ✕
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
         </button>
       </div>
     </TransitionGroup>
@@ -74,21 +66,21 @@ const closeNotification = (id) => {
 </template>
 
 <style scoped>
-.toast-enter-active,
-.toast-leave-active {
-  transition: all 0.3s ease;
+/* Slide in from the RIGHT edge */
+.toast-enter-active {
+  transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-
+.toast-leave-active {
+  transition: all 0.25s ease-in;
+}
 .toast-enter-from {
   opacity: 0;
-  transform: translateX(100px);
+  transform: translateX(110%);
 }
-
 .toast-leave-to {
   opacity: 0;
-  transform: translateX(100px);
+  transform: translateX(110%);
 }
-
 .toast-move {
   transition: transform 0.3s ease;
 }

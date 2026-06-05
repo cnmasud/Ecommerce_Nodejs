@@ -1,25 +1,33 @@
 <script>
 import axios from "axios";
 import { useUserStore } from "@/stores/user";
+import { useNotificationStore } from "@/stores/notification";
 
 export default {
-  setup() {
-    const userStore = useUserStore();
-    return { userStore };
+  props: {
+    userID: {
+      type: String,
+      default: "",
+    },
   },
 
-  props: {
-    userID: String,
+  setup() {
+    const userStore = useUserStore();
+    const notification = useNotificationStore();
+    return { userStore, notification };
   },
 
   data() {
     return {
+      loading: false,
+      saving: false,
+      avatarFile: null,
       user: {
         name: "",
-        avatar: null,
         username: "",
         email: "",
         phone: "",
+        avatar: "",
         address: {
           country: "",
           province: "",
@@ -28,342 +36,183 @@ export default {
           street: "",
         },
       },
-      updateUser: {
-        name: "",
-        avatar: null,
-        username: "",
-        email: "",
-        phone: "",
-        address: {
-          country: "",
-          province: "",
-          city: "",
-          postCode: "",
-          street: "",
-        },
-      },
+      errorMessage: "",
     };
   },
 
   async created() {
-    try {
-      const user = await axios({
-        baseURL: import.meta.env.VITE_BACKENDURL,
-        method: "get",
-        url: "/user/show",
-        params: {
-          userID: this.userID,
-        },
-      });
-
-      this.user = user.data;
-      this.updateUser = user.data;
-    } catch (e) {
-      console.log(e);
+    if (this.userID) {
+      await this.fetchUser();
     }
   },
 
   methods: {
-    async updateProfile() {
+    async fetchUser() {
+      this.loading = true;
+      try {
+        const res = await axios({
+          baseURL: import.meta.env.VITE_BACKENDURL,
+          method: "get",
+          url: "/user/show",
+          params: { userID: this.userID },
+          headers: { Authorization: `Bearer ${this.userStore.getToken}` },
+        });
+        const data = res.data;
+        this.user.name = data.name || "";
+        this.user.username = data.username || "";
+        this.user.email = data.email || "";
+        this.user.phone = data.phone || "";
+        this.user.avatar = data.avatar || "";
+        if (data.address) {
+          this.user.address = { ...data.address };
+        }
+      } catch (e) {
+        this.errorMessage = e.response?.data?.message || "Failed to load profile.";
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    onAvatarChange(e) {
+      const file = e.target.files[0];
+      if (file) {
+        this.avatarFile = file;
+        this.user.avatar = URL.createObjectURL(file);
+      }
+    },
+
+    async saveProfile() {
+      this.saving = true;
+      this.errorMessage = "";
       try {
         const formData = new FormData();
-
-        formData.append("name", this.updateUser.name);
-        formData.append("avatar", this.updateUser.avatar);
-        formData.append("username", this.updateUser.username);
-        formData.append("email", this.updateUser.email);
-        formData.append("phone", this.updateUser.phone);
-        formData.append("country", this.updateUser.address.country);
-        formData.append("province", this.updateUser.address.province);
-        formData.append("city", this.updateUser.address.city);
-        formData.append("street", this.updateUser.address.street);
-        formData.append("postCode", this.updateUser.address.postCode);
+        formData.append("name", this.user.name);
+        formData.append("username", this.user.username);
+        formData.append("email", this.user.email);
+        formData.append("phone", this.user.phone);
+        formData.append("country", this.user.address.country);
+        formData.append("province", this.user.address.province);
+        formData.append("city", this.user.address.city);
+        formData.append("postCode", this.user.address.postCode);
+        formData.append("street", this.user.address.street);
+        if (this.avatarFile) {
+          formData.append("avatar", this.avatarFile);
+        }
 
         await axios({
           baseURL: import.meta.env.VITE_BACKENDURL,
           method: "put",
           url: "/user/update",
-          params: {
-            userID: this.userID,
-          },
-          headers: { "Content-Type": "multipart/form-data" },
+          params: { userID: this.userID },
           data: formData,
+          headers: {
+            Authorization: `Bearer ${this.userStore.getToken}`,
+            "Content-Type": "multipart/form-data",
+          },
         });
 
-        window.location.reload();
+        this.notification.success("Profile updated successfully!");
+        // Reload user profile data without full page reload
+        await this.fetchUser();
       } catch (e) {
-        console.log(e);
+        const msg = e.response?.data?.message || "Failed to update profile.";
+        this.errorMessage = msg;
+        this.notification.error(msg);
+      } finally {
+        this.saving = false;
       }
-    },
-
-    onChangeAvatarUpload(event) {
-      this.updateUser.avatar = event.target.files[0];
     },
   },
 };
 </script>
 
 <template>
-  <main>
-    <div class="flex flex-col space-y-4 mx-2 md:mx-0 items-center">
-      <div class="avatar">
-        <div
-          class="w-24 sm:w-36 md:w-56 rounded-full ring ring-primary ring-offset-base-100 ring-offset-2"
-        >
-          <img :src="this.user.avatar" />
-        </div>
-      </div>
-      <div>
-        <p class="font-bold text-3xl">
-          {{ this.user.name }}
-        </p>
-        <p class="text-sm text-gray-500">@{{ this.user.username }}</p>
-      </div>
-      <div class="rounded-md shadow-md w-full p-8">
-        <div
-          class="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:justify-between"
-        >
-          <h2 class="font-bold text-2xl">My Information</h2>
-          <label for="updateUserInfo" class="btn btn-primary modal-button"
-            >Update Information</label
-          >
-        </div>
-        <div class="divider"></div>
-
-        <p>
-          <span class="font-bold">Phone:</span>
-          <span>{{ this.user.phone }}</span>
-        </p>
-        <p>
-          <span class="font-bold">Email:</span>
-          <span>{{ this.user.email }}</span>
-        </p>
-        <p>
-          <span class="font-bold">Street:</span>
-          <span>{{ this.user.address.street }}</span>
-        </p>
-        <p>
-          <span class="font-bold">City:</span>
-          <span>{{ this.user.address.city }}</span>
-        </p>
-        <p>
-          <span class="font-bold">Province:</span>
-          <span>{{ this.user.address.province }}</span>
-        </p>
-        <p>
-          <span class="font-bold">Country:</span>
-          <span>{{ this.user.address.country }}</span>
-        </p>
-        <p>
-          <span class="font-bold">Post Code:</span>
-          <span>{{ this.user.address.postCode }}</span>
-        </p>
-      </div>
-
-      <div class="rounded-md shadow-md w-full p-8">
-        <h2 class="font-bold text-2xl">My Orders</h2>
-        <div class="divider"></div>
-        <div class="overflow-x-auto">
-          <table class="table w-full">
-            <!-- head -->
-            <thead>
-              <tr>
-                <th></th>
-                <th>Name</th>
-                <th>Price</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr class="hover">
-                <th>1</th>
-                <td>Lorem ipsum dolor sit amet</td>
-                <td>$ 999</td>
-                <td>Mar 23, 2022</td>
-              </tr>
-              <tr class="hover">
-                <th>2</th>
-                <td>Lorem ipsum dolor sit amet</td>
-                <td>$ 999</td>
-                <td>Mar 23, 2022</td>
-              </tr>
-              <tr class="hover">
-                <th>3</th>
-                <td>Lorem ipsum dolor sit amet</td>
-                <td>$ 999</td>
-                <td>Mar 23, 2022</td>
-              </tr>
-              <tr class="hover">
-                <th>4</th>
-                <td>Lorem ipsum dolor sit amet</td>
-                <td>$ 999</td>
-                <td>Mar 23, 2022</td>
-              </tr>
-              <tr class="hover">
-                <th>5</th>
-                <td>Lorem ipsum dolor sit amet</td>
-                <td>$ 999</td>
-                <td>Mar 23, 2022</td>
-              </tr>
-              <tr class="hover">
-                <th>6</th>
-                <td>Lorem ipsum dolor sit amet</td>
-                <td>$ 999</td>
-                <td>Mar 23, 2022</td>
-              </tr>
-              <tr class="hover">
-                <th>7</th>
-                <td>Lorem ipsum dolor sit amet</td>
-                <td>$ 999</td>
-                <td>Mar 23, 2022</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+  <div class="max-w-2xl mx-auto py-4 px-2 md:px-0">
+    <!-- Loading -->
+    <div v-if="loading" class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg text-primary"></span>
     </div>
-    <input type="checkbox" id="updateUserInfo" class="modal-toggle" />
-    <div class="modal">
-      <div class="modal-box w-11/12 max-w-5xl">
-        <label
-          for="updateUserInfo"
-          class="btn btn-sm btn-circle absolute right-2 top-2"
-          >✕</label
-        >
-        <h3 class="font-bold text-lg">Update Your Information</h3>
-        <div class="divider"></div>
-        <form
-          action="POST"
-          class="flex flex-col space-y-8"
-          id="updateUserForm"
-          @submit.prevent="updateProfile"
-        >
-          <div>
-            <h4 class="font-bold text-base">About You</h4>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div class="form-control w-full">
-                <label class="label">
-                  <span class="label-text">Name</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Type here"
-                  class="input input-bordered w-full"
-                  v-model="this.updateUser.name"
-                />
-              </div>
-              <div class="form-control w-full">
-                <label class="label">
-                  <span class="label-text">Phone</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Type here"
-                  class="input input-bordered w-full"
-                  v-model="this.updateUser.phone"
-                />
-              </div>
-              <div class="form-control w-full">
-                <label class="label">
-                  <span class="label-text">Email</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Type here"
-                  class="input input-bordered w-full"
-                  v-model="this.updateUser.email"
-                />
-              </div>
-              <div class="form-control w-full">
-                <label class="label">
-                  <span class="label-text">Username</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Type here"
-                  class="input input-bordered w-full"
-                  v-model="this.updateUser.username"
-                />
-              </div>
-              <div class="form-control w-full">
-                <label class="label">
-                  <span class="label-text">Avatar</span>
-                </label>
-                <input
-                  type="file"
-                  placeholder="Type here"
-                  class="input input-bordered w-full py-1.5"
-                  @change="onChangeAvatarUpload($event)"
-                />
-              </div>
-            </div>
-          </div>
-          <div>
-            <h4 class="font-bold text-base">Address:</h4>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div class="form-control w-full">
-                <label class="label">
-                  <span class="label-text">Street</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Type here"
-                  class="input input-bordered w-full"
-                  v-model="this.updateUser.address.street"
-                />
-              </div>
-              <div class="form-control w-full">
-                <label class="label">
-                  <span class="label-text">City</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Type here"
-                  class="input input-bordered w-full"
-                  v-model="this.updateUser.address.city"
-                />
-              </div>
-              <div class="form-control w-full">
-                <label class="label">
-                  <span class="label-text">Province</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Type here"
-                  class="input input-bordered w-full"
-                  v-model="this.updateUser.address.province"
-                />
-              </div>
-              <div class="form-control w-full">
-                <label class="label">
-                  <span class="label-text">Country</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Type here"
-                  class="input input-bordered w-full"
-                  v-model="this.updateUser.address.country"
-                />
-              </div>
-              <div class="form-control w-full">
-                <label class="label">
-                  <span class="label-text">Post Code</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Type here"
-                  class="input input-bordered w-full"
-                  v-model="this.updateUser.address.postCode"
-                />
-              </div>
-            </div>
-          </div>
 
-          <div class="modal-action">
-            <button class="btn btn-primary" type="submit">Submit</button>
-          </div>
-        </form>
+    <div v-else>
+      <h1 class="text-2xl font-bold mb-6">My Profile</h1>
+
+      <!-- Error -->
+      <div v-if="errorMessage" class="alert alert-error mb-4">
+        <span>{{ errorMessage }}</span>
       </div>
+
+      <!-- Avatar section -->
+      <div class="flex items-center gap-4 mb-6">
+        <div class="avatar">
+          <div class="w-20 rounded-full ring ring-primary ring-offset-base-100 ring-offset-2">
+            <img
+              :src="user.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + (user.username || 'user')"
+              :alt="user.username"
+            />
+          </div>
+        </div>
+        <div>
+          <label class="btn btn-outline btn-sm cursor-pointer">
+            Change Avatar
+            <input type="file" class="hidden" accept="image/*" @change="onAvatarChange" />
+          </label>
+          <p class="text-xs text-base-content/50 mt-1">JPG, PNG or GIF. Max 5MB.</p>
+        </div>
+      </div>
+
+      <!-- Profile Form -->
+      <form @submit.prevent="saveProfile" class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-control">
+            <label class="label"><span class="label-text">Full Name</span></label>
+            <input v-model="user.name" type="text" class="input input-bordered" placeholder="John Doe" />
+          </div>
+          <div class="form-control">
+            <label class="label"><span class="label-text">Username</span></label>
+            <input v-model="user.username" type="text" class="input input-bordered" placeholder="johndoe" />
+          </div>
+          <div class="form-control">
+            <label class="label"><span class="label-text">Email</span></label>
+            <input v-model="user.email" type="email" class="input input-bordered" placeholder="you@example.com" />
+          </div>
+          <div class="form-control">
+            <label class="label"><span class="label-text">Phone</span></label>
+            <input v-model="user.phone" type="tel" class="input input-bordered" placeholder="+1 555 000 0000" />
+          </div>
+        </div>
+
+        <div class="divider">Address</div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-control">
+            <label class="label"><span class="label-text">Country</span></label>
+            <input v-model="user.address.country" type="text" class="input input-bordered" placeholder="USA" />
+          </div>
+          <div class="form-control">
+            <label class="label"><span class="label-text">Province / State</span></label>
+            <input v-model="user.address.province" type="text" class="input input-bordered" placeholder="California" />
+          </div>
+          <div class="form-control">
+            <label class="label"><span class="label-text">City</span></label>
+            <input v-model="user.address.city" type="text" class="input input-bordered" placeholder="Los Angeles" />
+          </div>
+          <div class="form-control">
+            <label class="label"><span class="label-text">Post Code</span></label>
+            <input v-model="user.address.postCode" type="text" class="input input-bordered" placeholder="90001" />
+          </div>
+          <div class="form-control md:col-span-2">
+            <label class="label"><span class="label-text">Street Address</span></label>
+            <input v-model="user.address.street" type="text" class="input input-bordered" placeholder="123 Main St" />
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-2">
+          <button type="submit" class="btn btn-primary" :disabled="saving">
+            <span v-if="saving" class="loading loading-spinner"></span>
+            <span v-else>Save Changes</span>
+          </button>
+        </div>
+      </form>
     </div>
-  </main>
+  </div>
 </template>

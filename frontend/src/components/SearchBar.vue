@@ -1,312 +1,127 @@
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 
-const router = useRouter()
+const router  = useRouter()
+const query   = ref('')
+const results = ref([])
+const loading = ref(false)
+const showDrop= ref(false)
+const base    = import.meta.env.VITE_BACKENDURL
 
-// State
-const searchQuery = ref('')
-const searchResults = ref([])
-const isSearching = ref(false)
-const showDropdown = ref(false)
-const selectedIndex = ref(-1)
-const searchInput = ref(null)
-
-// Debounce timer
 let debounceTimer = null
 
-// Computed
-const hasResults = computed(() => searchResults.value.length > 0)
-
-// Methods
-const searchProducts = async (query) => {
-  if (!query || query.trim().length < 2) {
-    searchResults.value = []
-    showDropdown.value = false
-    return
-  }
-
-  isSearching.value = true
-
+const fetchSuggestions = async (q) => {
+  if (!q?.trim() || q.length < 2) { results.value = []; return }
+  loading.value = true
   try {
-    const response = await axios({
-      baseURL: import.meta.env.VITE_BACKENDURL,
-      method: 'get',
-      url: 'main/product/search',
-      params: {
-        q: query.trim(),
-        limit: 8
-      }
-    })
-
-    searchResults.value = response.data || []
-    showDropdown.value = searchResults.value.length > 0
-  } catch (error) {
-    console.error('Search error:', error)
-    // If search endpoint doesn't exist, try getting all products and filter
-    try {
-      const response = await axios({
-        baseURL: import.meta.env.VITE_BACKENDURL,
-        method: 'get',
-        url: 'main/product/recent'
-      })
-      
-      const products = Object.values(response.data || {})
-      const lowerQuery = query.toLowerCase()
-      
-      searchResults.value = products.filter(product => 
-        product.name.toLowerCase().includes(lowerQuery) ||
-        product.description?.toLowerCase().includes(lowerQuery)
-      ).slice(0, 8)
-      
-      showDropdown.value = searchResults.value.length > 0
-    } catch (fallbackError) {
-      console.error('Fallback search error:', fallbackError)
-      searchResults.value = []
-      showDropdown.value = false
-    }
+    const res = await axios.get(`${base}/main/product/search`, { params: { q, limit: 8 } })
+    results.value = Array.isArray(res.data) ? res.data : (res.data.products || Object.values(res.data))
+  } catch {
+    results.value = []
   } finally {
-    isSearching.value = false
+    loading.value = false
   }
 }
 
-const handleInput = () => {
-  // Clear previous timer
-  if (debounceTimer) {
-    clearTimeout(debounceTimer)
-  }
-
-  // Set new timer for debounced search
-  debounceTimer = setTimeout(() => {
-    searchProducts(searchQuery.value)
-  }, 300)
-}
-
-const selectResult = (product) => {
-  router.push(`/product/${product._id}`)
-  clearSearch()
-}
-
-const clearSearch = () => {
-  searchQuery.value = ''
-  searchResults.value = []
-  showDropdown.value = false
-  selectedIndex.value = -1
-}
-
-const handleKeydown = (event) => {
-  if (!showDropdown.value) return
-
-  switch (event.key) {
-    case 'ArrowDown':
-      event.preventDefault()
-      selectedIndex.value = Math.min(selectedIndex.value + 1, searchResults.value.length - 1)
-      break
-    case 'ArrowUp':
-      event.preventDefault()
-      selectedIndex.value = Math.max(selectedIndex.value - 1, -1)
-      break
-    case 'Enter':
-      event.preventDefault()
-      if (selectedIndex.value >= 0 && selectedIndex.value < searchResults.value.length) {
-        selectResult(searchResults.value[selectedIndex.value])
-      } else if (searchQuery.value.trim()) {
-        performFullSearch()
-      }
-      break
-    case 'Escape':
-      clearSearch()
-      searchInput.value?.blur()
-      break
-  }
-}
-
-const performFullSearch = () => {
-  if (searchQuery.value.trim()) {
-    router.push({
-      path: '/search',
-      query: { q: searchQuery.value.trim() }
-    })
-    clearSearch()
-  }
-}
-
-const handleClickOutside = (event) => {
-  const searchContainer = event.target.closest('.search-container')
-  if (!searchContainer) {
-    showDropdown.value = false
-    selectedIndex.value = -1
-  }
-}
-
-const trimText = (text, length = 50) => {
-  if (!text) return ''
-  return text.length > length ? text.substring(0, length) + '...' : text
-}
-
-// Lifecycle
-onMounted(() => {
-  document.addEventListener('click', handleClickOutside)
+watch(query, (val) => {
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => fetchSuggestions(val), 300)
 })
 
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
-  if (debounceTimer) {
-    clearTimeout(debounceTimer)
-  }
-})
+const goToProduct = (id) => {
+  router.push(`/product/${id}`)
+  query.value = ''
+  results.value = []
+  showDrop.value = false
+}
 
-// Watch for route changes to clear search
-watch(() => router.currentRoute.value, () => {
-  clearSearch()
-})
+const submitSearch = () => {
+  const q = query.value.trim()
+  if (!q) return
+  router.push({ path: '/search', query: { q } })
+  results.value = []
+  showDrop.value = false
+}
+
+const onFocus  = () => { showDrop.value = true }
+const onBlur   = () => { setTimeout(() => { showDrop.value = false }, 180) }
 </script>
 
 <template>
-  <div class="search-container relative w-full max-w-lg">
-    <div class="form-control">
-      <div class="input-group">
+  <div class="relative w-full">
+    <form @submit.prevent="submitSearch" class="flex w-full">
+      <div class="relative flex-1">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-base-content/40 pointer-events-none"
+          fill="none" viewBox="0 0 24 24" stroke="currentColor"
+        >
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
         <input
-          ref="searchInput"
-          v-model="searchQuery"
-          @input="handleInput"
-          @keydown="handleKeydown"
-          @focus="searchQuery && searchProducts(searchQuery)"
+          v-model="query"
           type="text"
-          placeholder="Search products..."
-          class="input input-bordered w-full"
+          placeholder="Search products…"
+          class="input input-bordered w-full pl-9 pr-3 h-10 text-sm rounded-r-none"
+          @focus="onFocus"
+          @blur="onBlur"
         />
-        <button
-          @click="performFullSearch"
-          class="btn btn-square btn-primary"
-          :disabled="!searchQuery.trim()"
-        >
-          <svg
-            v-if="!isSearching"
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-5 w-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
-          <span v-else class="loading loading-spinner loading-sm"></span>
-        </button>
+        <!-- Live spinner -->
+        <span v-if="loading" class="absolute right-3 top-1/2 -translate-y-1/2 loading loading-spinner loading-xs text-primary"></span>
       </div>
-    </div>
+      <button type="submit" class="btn btn-primary h-10 min-h-0 px-4 rounded-l-none">
+        Search
+      </button>
+    </form>
 
-    <!-- Autocomplete Dropdown -->
+    <!-- Dropdown suggestions -->
     <div
-      v-if="showDropdown"
-      class="absolute z-50 w-full mt-2 bg-base-100 shadow-2xl rounded-lg max-h-96 overflow-y-auto"
+      v-if="showDrop && (results.length || (query.length >= 2 && !loading))"
+      class="absolute top-full mt-1 left-0 right-0 bg-base-100 border border-base-300 rounded-xl shadow-2xl z-50 overflow-hidden"
     >
-      <!-- Loading State -->
-      <div v-if="isSearching" class="p-4 text-center">
-        <span class="loading loading-spinner loading-md text-primary"></span>
-        <p class="text-sm text-base-content/70 mt-2">Searching...</p>
+      <!-- No results -->
+      <div v-if="!results.length && !loading" class="px-4 py-3 text-sm text-base-content/60">
+        No results for "<strong>{{ query }}</strong>"
+        <router-link :to="{ path: '/search', query: { q: query } }" class="ml-2 link link-primary text-xs">See all</router-link>
       </div>
 
-      <!-- Results -->
-      <div v-else-if="hasResults" class="py-2">
-        <div
-          v-for="(product, index) in searchResults"
-          :key="product._id"
-          @click="selectResult(product)"
-          @mouseenter="selectedIndex = index"
-          :class="[
-            'flex items-center gap-4 px-4 py-3 cursor-pointer transition-colors',
-            selectedIndex === index ? 'bg-primary/10' : 'hover:bg-base-200'
-          ]"
+      <!-- Result items -->
+      <ul v-else>
+        <li
+          v-for="item in results"
+          :key="item._id"
+          @mousedown.prevent="goToProduct(item._id)"
+          class="flex items-center gap-3 px-3 py-2 hover:bg-base-200 cursor-pointer transition-colors"
         >
-          <div class="avatar">
-            <div class="w-12 h-12 rounded">
-              <img
-                :src="product.images?.[0] || 'https://via.placeholder.com/100'"
-                :alt="product.name"
-                class="object-cover"
-              />
-            </div>
-          </div>
+          <img
+            :src="item.images?.[0] || 'https://placehold.co/40x40?text=📦'"
+            :alt="item.name"
+            class="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+          />
           <div class="flex-1 min-w-0">
-            <h4 class="font-semibold text-sm truncate">{{ product.name }}</h4>
-            <p class="text-xs text-base-content/70 truncate">
-              {{ trimText(product.description, 60) }}
-            </p>
-            <div class="flex items-center gap-2 mt-1">
-              <span class="text-sm font-bold text-primary">${{ product.price }}</span>
-              <span
-                v-if="product.stock > 0"
-                class="badge badge-success badge-xs"
-              >
-                In Stock
-              </span>
-              <span v-else class="badge badge-error badge-xs">Out of Stock</span>
-            </div>
+            <p class="text-sm font-medium truncate">{{ item.name }}</p>
+            <p class="text-xs text-base-content/50 truncate">{{ item.description?.slice(0, 60) }}…</p>
           </div>
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-5 w-5 text-base-content/30"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-          >
-            <path
-              fill-rule="evenodd"
-              d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-              clip-rule="evenodd"
-            />
-          </svg>
-        </div>
+          <span class="text-primary font-bold text-sm flex-shrink-0">${{ Number(item.price).toFixed(2) }}</span>
+        </li>
 
-        <!-- View All Results -->
-        <div class="border-t border-base-300 mt-2">
-          <button
-            @click="performFullSearch"
-            class="w-full px-4 py-3 text-sm text-primary hover:bg-base-200 transition-colors text-center font-semibold"
+        <!-- "View all" footer -->
+        <li class="border-t border-base-300">
+          <router-link
+            :to="{ path: '/search', query: { q: query } }"
+            @mousedown.prevent
+            class="flex items-center justify-center gap-1 px-4 py-2 text-sm text-primary hover:bg-base-200 transition-colors"
           >
-            View all results for "{{ searchQuery }}"
-          </button>
-        </div>
-      </div>
-
-      <!-- No Results -->
-      <div v-else class="p-8 text-center">
-        <div class="text-4xl mb-2">🔍</div>
-        <p class="font-semibold mb-1">No products found</p>
-        <p class="text-sm text-base-content/70">
-          Try searching with different keywords
-        </p>
-      </div>
+            View all results for "{{ query }}"
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+            </svg>
+          </router-link>
+        </li>
+      </ul>
     </div>
   </div>
 </template>
-
-<style scoped>
-.search-container {
-  position: relative;
-}
-
-/* Custom scrollbar for dropdown */
-.search-container > div:last-child::-webkit-scrollbar {
-  width: 8px;
-}
-
-.search-container > div:last-child::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.search-container > div:last-child::-webkit-scrollbar-thumb {
-  background: hsl(var(--bc) / 0.2);
-  border-radius: 4px;
-}
-
-.search-container > div:last-child::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--bc) / 0.3);
-}
-</style>

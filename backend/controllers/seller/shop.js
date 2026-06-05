@@ -3,79 +3,137 @@ var { Shop } = require("../../models/shop");
 
 // Create new shop
 async function createShop(req, res, next) {
-  const newShop = new Shop({
-    name: req.body.name,
-    user: req.query.userID,
-    phone: req.body.phone,
-    email: req.body.email,
-    description: req.body.description,
-    address: {
-      country: req.body.country,
-      province: req.body.province,
-      city: req.body.city,
-      postCode: req.body.postCode,
-      street: req.body.street,
-    },
-  });
+  try {
+    const userID = req.query.userID;
+    if (!userID) {
+      return res.status(400).json({ success: false, message: "userID is required" });
+    }
+    if (!req.body.name) {
+      return res.status(400).json({ success: false, message: "Shop name is required" });
+    }
 
-  await newShop.save();
+    const newShop = new Shop({
+      name: req.body.name,
+      user: userID,
+      phone: req.body.phone,
+      email: req.body.email,
+      description: req.body.description,
+      address: {
+        country: req.body.country,
+        province: req.body.province,
+        city: req.body.city,
+        postCode: req.body.postCode,
+        street: req.body.street,
+      },
+    });
 
-  // If there is a new logo
-  if (req.file) {
-    const path = /(\/uploads)(.+)/g.exec(req.file.path)[0];
-    await Shop.findByIdAndUpdate(newShop._id, { logo: path });
+    await newShop.save();
+
+    // If there is a new logo
+    if (req.file) {
+      const pathMatch = /(\/uploads)(.+)/g.exec(req.file.path);
+      if (pathMatch) {
+        await Shop.findByIdAndUpdate(newShop._id, { logo: pathMatch[0] });
+      }
+    }
+
+    // Add shop to the user
+    await User.findByIdAndUpdate(userID, { shop: newShop._id });
+
+    res.status(201).json({ success: true, message: "Shop created successfully!", shop: newShop });
+  } catch (err) {
+    next(err);
   }
-
-  // Add shop to the user
-  await User.findByIdAndUpdate(req.query.userID, { shop: newShop._id });
-
-  res.send("Shop Created!");
 }
 
 // Show shop
 async function showShop(req, res, next) {
-  if (req.query.withProducts == "true") {
-    res.json(await Shop.findById(req.query.shopID).populate("products"));
-  } else {
-    res.json(await Shop.findById(req.query.shopID));
+  try {
+    if (!req.query.shopID) {
+      return res.status(400).json({ success: false, message: "shopID is required" });
+    }
+    let shop;
+    if (req.query.withProducts === "true") {
+      shop = await Shop.findById(req.query.shopID).populate("products");
+    } else {
+      shop = await Shop.findById(req.query.shopID);
+    }
+    if (!shop) {
+      return res.status(404).json({ success: false, message: "Shop not found" });
+    }
+    res.json(shop);
+  } catch (err) {
+    next(err);
   }
 }
 
 // Update Shop
 async function updateShop(req, res, next) {
-  // If there is a new logo
-  if (req.file) {
-    const path = /(\/uploads)(.+)/g.exec(req.file.path)[0];
-    await Shop.findByIdAndUpdate(req.query.shopID, { logo: path });
-  }
-  await Shop.findByIdAndUpdate(req.query.shopID, {
-    name: req.body.name,
-    phone: req.body.phone,
-    email: req.body.email,
-    description: req.body.description,
-    address: {
-      country: req.body.country,
-      province: req.body.province,
-      city: req.body.city,
-      postCode: req.body.postCode,
-      street: req.body.street,
-    },
-  });
+  try {
+    if (!req.query.shopID) {
+      return res.status(400).json({ success: false, message: "shopID is required" });
+    }
 
-  res.send("Shop Updated!");
+    // If there is a new logo
+    if (req.file) {
+      const pathMatch = /(\/uploads)(.+)/g.exec(req.file.path);
+      if (pathMatch) {
+        await Shop.findByIdAndUpdate(req.query.shopID, { logo: pathMatch[0] });
+      }
+    }
+
+    const updatedShop = await Shop.findByIdAndUpdate(
+      req.query.shopID,
+      {
+        name: req.body.name,
+        phone: req.body.phone,
+        email: req.body.email,
+        description: req.body.description,
+        address: {
+          country: req.body.country,
+          province: req.body.province,
+          city: req.body.city,
+          postCode: req.body.postCode,
+          street: req.body.street,
+        },
+      },
+      { new: true },
+    );
+
+    if (!updatedShop) {
+      return res.status(404).json({ success: false, message: "Shop not found" });
+    }
+
+    res.json({ success: true, message: "Shop updated successfully!", shop: updatedShop });
+  } catch (err) {
+    next(err);
+  }
 }
 
 // Delete Shop
 async function deleteShop(req, res, next) {
-  const shop = await Shop.findById(req.query.shopID);
-  // Update user, remove shop from user
-  await User.findByIdAndUpdate(shop.user, {
-    $unset: { shop: 1 },
-  });
-  // Delete Shop
-  await Shop.findByIdAndDelete(req.query.shopID);
+  try {
+    if (!req.query.shopID) {
+      return res.status(400).json({ success: false, message: "shopID is required" });
+    }
 
-  res.send("Shop Deleted!");
+    const shop = await Shop.findById(req.query.shopID);
+    if (!shop) {
+      return res.status(404).json({ success: false, message: "Shop not found" });
+    }
+
+    // Update user, remove shop from user
+    await User.findByIdAndUpdate(shop.user, {
+      $unset: { shop: 1 },
+    });
+
+    // Delete Shop
+    await Shop.findByIdAndDelete(req.query.shopID);
+
+    res.json({ success: true, message: "Shop deleted successfully!" });
+  } catch (err) {
+    next(err);
+  }
 }
 
 module.exports = {

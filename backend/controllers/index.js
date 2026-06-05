@@ -6,81 +6,192 @@ var { User } = require("../models/user");
 
 // Retrieve website information
 async function showSite(req, res, next) {
-  res.json(await Site.find({}));
+  try {
+    const sites = await Site.find({});
+    res.json(sites);
+  } catch (err) {
+    next(err);
+  }
 }
 
 // Retrieve all product categories
 async function listAllCategories(req, res, next) {
-  res.json(await ProductCategory.find({}));
+  try {
+    const categories = await ProductCategory.find({});
+    res.json(categories);
+  } catch (err) {
+    next(err);
+  }
 }
 
 // Retrieve recently created products
 async function listRecentProducts(req, res, next) {
-  res.json(await Product.find({}).sort({ created_at: -1 }).limit(15));
+  try {
+    const products = await Product.find({}).sort({ created_at: -1 }).limit(15);
+    res.json(products);
+  } catch (err) {
+    next(err);
+  }
 }
 
 // Retrieve recently created shops
 async function listRecentShops(req, res, next) {
-  res.json(await Shop.find({}).sort({ created_at: -1 }).limit(15));
+  try {
+    const shops = await Shop.find({}).sort({ created_at: -1 }).limit(15);
+    res.json(shops);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Search products by name or description
+async function searchProducts(req, res, next) {
+  try {
+    const { q = '', limit = 10, page = 1 } = req.query;
+
+    if (!q || q.trim().length < 2) {
+      return res.json([]);
+    }
+
+    const regex = new RegExp(q.trim(), 'i');
+    const products = await Product.find({
+      $or: [
+        { name: regex },
+        { description: regex },
+      ],
+    })
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .sort({ created_at: -1 });
+
+    res.json(products);
+  } catch (err) {
+    next(err);
+  }
 }
 
 // Retrieve one single product category
 async function showCategory(req, res, next) {
-  res.json(
-    await ProductCategory.findById(req.query.categoryID).populate("products"),
-  );
+  try {
+    if (!req.query.categoryID) {
+      return res.status(400).json({ success: false, message: "categoryID is required" });
+    }
+    const category = await ProductCategory.findById(req.query.categoryID).populate("products");
+    if (!category) {
+      return res.status(404).json({ success: false, message: "Category not found" });
+    }
+    res.json(category);
+  } catch (err) {
+    next(err);
+  }
 }
 
 // Retrieve one single shop
 async function showShop(req, res, next) {
-  res.json(await Shop.findById(req.query.shopID).populate("products"));
+  try {
+    if (!req.query.shopID) {
+      return res.status(400).json({ success: false, message: "shopID is required" });
+    }
+    const shop = await Shop.findById(req.query.shopID).populate("products");
+    if (!shop) {
+      return res.status(404).json({ success: false, message: "Shop not found" });
+    }
+    res.json(shop);
+  } catch (err) {
+    next(err);
+  }
 }
 
 // Retrieve one single product
 async function showProduct(req, res, next) {
-  res.json(await Product.findById(req.query.productID).populate("reviews"));
+  try {
+    if (!req.query.productID) {
+      return res.status(400).json({ success: false, message: "productID is required" });
+    }
+    const product = await Product.findById(req.query.productID).populate("reviews");
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+    res.json(product);
+  } catch (err) {
+    next(err);
+  }
 }
 
 // Add review to a product
 async function addProductReview(req, res, next) {
-  const product = await Product.findById(req.query.productID);
-  const user = await User.findById(req.query.userID);
-  const newReview = new Review({
-    rating: req.body.rating,
-    content: req.body.content,
-    product: product,
-    user: user,
-  });
-  await newReview.save();
+  try {
+    const { productID, userID } = req.query;
+    const { rating, content } = req.body;
 
-  // update product
-  await Product.findByIdAndUpdate(req.query.productID, {
-    $push: { reviews: newReview },
-  });
+    if (!productID || !userID) {
+      return res.status(400).json({ success: false, message: "productID and userID are required" });
+    }
+    if (!rating || !content) {
+      return res.status(400).json({ success: false, message: "rating and content are required" });
+    }
 
-  // update user
-  await User.findByIdAndUpdate(req.query.userID, {
-    $push: { reviews: newReview },
-  });
+    const product = await Product.findById(productID);
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
 
-  res.json(newReview);
+    const user = await User.findById(userID);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const newReview = new Review({
+      rating,
+      content,
+      product: product._id,
+      user: user._id,
+    });
+    await newReview.save();
+
+    // update product
+    await Product.findByIdAndUpdate(productID, {
+      $push: { reviews: newReview._id },
+    });
+
+    // update user
+    await User.findByIdAndUpdate(userID, {
+      $push: { reviews: newReview._id },
+    });
+
+    res.json(newReview);
+  } catch (err) {
+    next(err);
+  }
 }
 
-//  Remove product review
+// Remove product review
 async function removeProductReview(req, res, next) {
-  const review = await Review.findByIdAndDelete(req.query.reviewID);
+  try {
+    const { reviewID } = req.query;
+    if (!reviewID) {
+      return res.status(400).json({ success: false, message: "reviewID is required" });
+    }
 
-  // update product
-  await Product.findByIdAndUpdate(review.product._id, {
-    $pull: { reviews: review._id },
-  });
+    const review = await Review.findByIdAndDelete(reviewID);
+    if (!review) {
+      return res.status(404).json({ success: false, message: "Review not found" });
+    }
 
-  // update user
-  await User.findByIdAndUpdate(review.user._id, {
-    $pull: { reviews: review._id },
-  });
+    // update product
+    await Product.findByIdAndUpdate(review.product, {
+      $pull: { reviews: review._id },
+    });
 
-  res.json(review);
+    // update user
+    await User.findByIdAndUpdate(review.user, {
+      $pull: { reviews: review._id },
+    });
+
+    res.json(review);
+  } catch (err) {
+    next(err);
+  }
 }
 
 module.exports = {
@@ -88,6 +199,7 @@ module.exports = {
   listAllCategories,
   listRecentProducts,
   listRecentShops,
+  searchProducts,
   showCategory,
   showShop,
   showProduct,
