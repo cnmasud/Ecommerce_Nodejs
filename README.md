@@ -2,6 +2,17 @@
 
 A **pure Node.js** e-commerce marketplace with a **Vue 3** frontend. Works completely **offline** — no external database needed for local development. Data is auto-seeded in an in-memory MongoDB on every start.
 
+## 🌐 Live Demo
+
+| | URL |
+|---|---|
+| **Frontend** | https://frontend-sepia-six-33.vercel.app |
+| **Backend API** | https://androdevtraining.vercel.app |
+| **Health Check** | https://androdevtraining.vercel.app/health |
+
+> Demo credentials — all use password **`demo1234`**:  
+> `admin@demo.com` · `seller@demo.com` · `customer@demo.com`
+
 ---
 
 ## 📸 Features
@@ -353,67 +364,91 @@ node serve.js              # Serve production build
 
 ---
 
-## ☁️ Deploy to Vercel
+## ☁️ Deploy to Vercel (Two Separate Projects)
+
+This project deploys as **two separate Vercel projects** — one for the backend API and one for the frontend SPA.
 
 ### Prerequisites
 - [Vercel account](https://vercel.com) (free)
-- [MongoDB Atlas](https://www.mongodb.com/atlas) free cluster (for the database)
+- [MongoDB Atlas](https://www.mongodb.com/atlas) free cluster
+- Vercel CLI: `npm install -g vercel && vercel login`
 
-### 1. Set up MongoDB Atlas
+---
+
+### Step 1 — Set up MongoDB Atlas
 1. Create a free cluster at https://www.mongodb.com/atlas
 2. Create a database user with read/write access
 3. Whitelist all IPs: `0.0.0.0/0` (Network Access)
 4. Copy the connection string: `mongodb+srv://user:pass@cluster.mongodb.net/marketplace`
 
-### 2. Deploy to Vercel
+---
 
-**Option A — Vercel CLI**
+### Step 2 — Deploy the Backend
+
 ```bash
-npm install -g vercel
-vercel login
-vercel --prod
+# From the project root
+cd /path/to/Ecommerce_Nodejs
+
+vercel --prod --yes
+# → Creates project "androdevtraining" (or your chosen name)
+# → Note the production URL, e.g. https://androdevtraining.vercel.app
 ```
 
-**Option B — Vercel Dashboard**
-1. Go to https://vercel.com/new
-2. Import your GitHub repo: `cnmasud/Ecommerce_Nodejs`
-3. Vercel auto-detects `vercel.json` — no extra config needed
-
-### 3. Set Environment Variables in Vercel
-
-In your Vercel project → **Settings → Environment Variables**, add:
-
-| Variable | Value |
-|---|---|
-| `MONGODB_URI` | `mongodb+srv://user:pass@cluster.mongodb.net/marketplace` |
-| `JWT_SECRET` | Any long random string (min 32 chars) |
-| `NODE_ENV` | `production` |
-
-### 4. Redeploy
-
-After adding env vars, trigger a redeploy:
+Set environment variables on the backend project:
 ```bash
-vercel --prod
+echo "mongodb+srv://user:pass@cluster.mongodb.net/marketplace" | vercel env add MONGODB_URI production --yes
+echo "your-jwt-secret-min-32-chars" | vercel env add JWT_SECRET production --yes
+echo "production" | vercel env add NODE_ENV production --yes
+
+# Redeploy to apply env vars
+vercel --prod --yes
 ```
 
-### How it works on Vercel
+---
 
-```
-Vercel Project
-├── /api/index.js        → Serverless function (Express API)
-│     ├── /main/*        → Products, categories, shops
-│     ├── /user/*        → Auth (register, login)
-│     ├── /cart/*        → Cart management
-│     ├── /order/*       → Orders
-│     ├── /seller/*      → Seller dashboard API
-│     ├── /admin/*       → Admin API
-│     └── /health        → Health check
-└── frontend/dist/       → Vue 3 SPA (static files)
-      └── /*             → All other routes → index.html
+### Step 3 — Deploy the Frontend
+
+```bash
+cd frontend
+
+vercel --prod --yes
+# → Creates project "frontend" (or your chosen name)
+# → Note the production URL, e.g. https://frontend-xxx.vercel.app
 ```
 
-> **Note:** File uploads (`/uploads`) are not persisted on Vercel (serverless = no filesystem).
-> Use a cloud storage service (Cloudinary, AWS S3) for production file uploads.
+Set the backend URL:
+```bash
+echo "https://androdevtraining.vercel.app" | vercel env add VITE_BACKENDURL production --yes
+
+# Redeploy to bake the URL into the Vue build
+vercel --prod --yes
+```
+
+---
+
+### How it works
+
+```
+Vercel Project 1 — Backend (api/index.js)
+  https://androdevtraining.vercel.app
+  ├── /main/*     → Products, categories, shops
+  ├── /user/*     → Auth (register, login)
+  ├── /cart/*     → Cart management
+  ├── /order/*    → Orders
+  ├── /seller/*   → Seller dashboard API
+  ├── /admin/*    → Admin API
+  └── /health     → Health check + DB status
+
+Vercel Project 2 — Frontend (frontend/)
+  https://frontend-sepia-six-33.vercel.app
+  └── Vue 3 SPA → calls backend URL via VITE_BACKENDURL
+```
+
+### CORS
+The backend automatically allows all `*.vercel.app` origins — no extra config needed when both projects are on Vercel.
+
+> **Note:** File uploads are not persisted on Vercel (serverless = no filesystem).
+> Use Cloudinary or AWS S3 for production file uploads.
 
 ---
 
