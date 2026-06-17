@@ -1,6 +1,6 @@
 # 🛒 Marketplace — Full-Stack Node.js E-Commerce App
 
-A **pure Node.js** e-commerce marketplace with a **Vue 3** frontend. Works completely **offline** — no external database needed. Data is auto-seeded in an in-memory MongoDB on every start.
+A **pure Node.js** e-commerce marketplace with a **Vue 3** frontend. Works completely **offline** — no external database needed for local development. Data is auto-seeded in an in-memory MongoDB on every start.
 
 ---
 
@@ -18,9 +18,10 @@ A **pure Node.js** e-commerce marketplace with a **Vue 3** frontend. Works compl
 | 🏪 **Shop Pages** | Per-seller storefronts with product listings |
 | 📦 **Order History** | Full order tracking for customers |
 | 🧑‍💼 **Seller Dashboard** | Product & shop management |
-| ⚙️ **Admin Panel** | User / shop / product management |
+| ⚙️ **Admin Panel** | User / shop / product / review management |
 | 🔔 **Toast Notifications** | Slide-in from right edge, coloured by type |
 | 🗄️ **Zero-config DB** | In-memory MongoDB, no install needed |
+| 📝 **Reviews** | Product review system |
 
 ---
 
@@ -36,7 +37,7 @@ cd backend
 npm install
 
 # 3. Start the backend (auto-seeds 50 products)
-node ./bin/www
+npm start
 # → http://localhost:3000
 
 # 4. In a new terminal — install & start the frontend
@@ -66,81 +67,92 @@ All accounts use password: **`demo1234`**
 
 ```
 androdevtraining/
-├── backend/                  # Express + Node.js API
-│   ├── bin/www               # Entry point — starts server + in-memory MongoDB
-│   ├── app.js                # Express app config + middleware
-│   ├── auth.js               # JWT authentication middleware
-│   ├── upload.js             # Multer file upload config
+├── backend/                        # Express + Node.js API
+│   ├── server.js                   # Entry point — starts server + in-memory MongoDB
+│   ├── app.js                      # Express app config + middleware
+│   ├── auth.js                     # JWT authentication middleware
+│   ├── upload.js                   # Multer file upload config
 │   ├── package.json
 │   ├── .env.example
 │   ├── controllers/
-│   │   ├── index.js          # Public controllers (products, categories, shops, search)
-│   │   ├── cart.js           # Cart CRUD
-│   │   ├── order.js          # Order management
-│   │   ├── user.js           # User profile
+│   │   ├── index.js                # Public controllers (products, categories, shops, search)
+│   │   ├── cart.js                 # Cart CRUD
+│   │   ├── order.js                # Order management
+│   │   ├── user.js                 # User profile
 │   │   ├── seller/
-│   │   │   ├── product.js    # Seller product CRUD
-│   │   │   └── shop.js       # Seller shop management
-│   │   └── admin/            # Admin controllers
+│   │   │   ├── product.js          # Seller product CRUD
+│   │   │   ├── review.js           # Seller review management
+│   │   │   └── shop.js             # Seller shop management
+│   │   └── admin/
+│   │       ├── product.js          # Admin product management
+│   │       ├── review.js           # Admin review moderation
+│   │       ├── shop.js             # Admin shop management
+│   │       ├── site.js             # Admin site settings
+│   │       └── user.js             # Admin user management
 │   ├── models/
 │   │   ├── product.js
 │   │   ├── category.js
 │   │   ├── shop.js
 │   │   ├── user.js
-│   │   ├── role.js
+│   │   ├── review.js
+│   │   ├── site.js
 │   │   ├── cart.js
 │   │   └── order.js
 │   ├── routes/
-│   │   ├── main.js           # Public API routes
-│   │   ├── user.js           # Auth routes
+│   │   ├── main.js                 # Public API routes
+│   │   ├── user.js                 # Auth routes
 │   │   ├── cart.js
 │   │   ├── order.js
 │   │   ├── seller.js
 │   │   └── admin.js
 │   └── scripts/
-│       ├── seedDemo.js       # Seeds 50 products, 10 categories, 5 shops, 3 users
-│       └── seedRoles.js      # Seeds roles (admin/seller/customer)
+│       ├── seedDemo.js             # Seeds 50 products, 10 categories, 5 shops, 3 users
+│       └── seedRoles.js            # Seeds roles (admin/seller/customer)
 │
-└── frontend/                 # Vue 3 + Vite + Tailwind CSS + DaisyUI
+└── frontend/                       # Vue 3 + Vite + Tailwind CSS + DaisyUI
     ├── index.html
+    ├── serve.js                    # Static file server for production build
     ├── vite.config.js
     ├── tailwind.config.js
     ├── public/
-    │   └── manifest.json     # PWA manifest
+    │   └── manifest.json           # PWA manifest
     └── src/
         ├── main.js
-        ├── App.vue
+        ├── App.vue                 # Root component — navbar, footer, mobile bottom nav
+        ├── index.css               # Tailwind base styles
         ├── router/
-        │   └── index.js      # All routes incl. 404 catch-all
-        ├── stores/           # Pinia stores
-        │   ├── user.js
-        │   ├── cart.js
-        │   └── notification.js
+        │   └── index.js            # All routes incl. 404 catch-all
+        ├── stores/                 # Pinia stores
+        │   ├── user.js             # Auth state + JWT
+        │   ├── cart.js             # Cart state (local + backend sync)
+        │   └── notification.js     # Toast notification queue
         ├── components/
-        │   ├── SearchBar.vue         # Live dropdown search (debounced, backend-connected)
-        │   ├── ProductGrid.vue       # Responsive product card grid
+        │   ├── SearchBar.vue       # Live dropdown search (debounced, backend-connected)
+        │   ├── ProductGrid.vue     # Responsive product card grid
+        │   ├── ImageSlideShow.vue  # Hero image carousel
         │   ├── ToastNotification.vue # Slide-in toast from right edge
-        │   └── ...
+        │   ├── admin/              # Admin-specific components
+        │   └── dashboard/          # Seller dashboard components
         ├── utils/
-        │   └── categoryIcons.js      # 80+ category name → emoji mappings
+        │   └── categoryIcons.js    # 80+ category name → emoji mappings
         └── views/
-            ├── HomeView.vue          # Hero carousel + featured products + shops
-            ├── ProductsView.vue      # All products — filter, sort, paginate
-            ├── ProductView.vue       # Single product detail
-            ├── CategoriesView.vue    # All categories with sample images
-            ├── CategoryView.vue      # Products filtered by category
-            ├── ShopsView.vue         # All shops listing
-            ├── ShopView.vue          # Single shop storefront
-            ├── SearchView.vue        # Full-text search results
-            ├── CartView.vue
-            ├── CheckOutView.vue
+            ├── HomeView.vue        # Hero carousel + featured products + shops
+            ├── ProductsView.vue    # All products — filter, sort, paginate
+            ├── ProductView.vue     # Single product detail + reviews
+            ├── CategoriesView.vue  # All categories with sample images
+            ├── CategoryView.vue    # Products filtered by category
+            ├── ShopsView.vue       # All shops listing
+            ├── ShopView.vue        # Single shop storefront
+            ├── SearchView.vue      # Full-text search results
+            ├── CartView.vue        # Shopping cart
+            ├── CheckOutView.vue    # Checkout flow
             ├── LoginView.vue
             ├── RegisterView.vue
             ├── UserProfileView.vue
             ├── OrderHistoryView.vue
             ├── OrderDetailView.vue
-            ├── DashboardView.vue
-            └── admin/AdminView.vue
+            ├── DashboardView.vue   # Seller dashboard
+            └── admin/              # Admin panel views
 ```
 
 ---
@@ -173,6 +185,8 @@ androdevtraining/
 | POST | `/cart/add` | Add item |
 | PUT | `/cart/update/:productID` | Update quantity |
 | DELETE | `/cart/remove/:productID` | Remove item |
+| DELETE | `/cart/clear` | Clear entire cart |
+| POST | `/cart/sync` | Sync local cart with backend |
 
 ### Orders (`/order`) — *requires login*
 | Method | Endpoint | Description |
@@ -189,6 +203,7 @@ androdevtraining/
 | DELETE | `/seller/product/delete/:id` | Delete product |
 | POST | `/seller/shop/create` | Create shop |
 | PUT | `/seller/shop/update` | Update shop |
+| GET | `/seller/review` | Get product reviews |
 
 ### Admin (`/admin`) — *requires Admin role*
 | Method | Endpoint | Description |
@@ -196,6 +211,13 @@ androdevtraining/
 | GET | `/admin/user/list` | All users |
 | GET | `/admin/shop/list` | All shops |
 | GET | `/admin/product/list` | All products |
+| GET | `/admin/review/list` | All reviews |
+| GET | `/admin/site` | Site settings |
+
+### Health Check
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/health` | Server + DB status |
 
 ---
 
@@ -223,13 +245,19 @@ PORT=3000
 NODE_ENV=development
 
 # JWT
-JWT_SECRET=your_super_secret_key_here
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production-min-32-chars
+JWT_EXPIRES_IN=7d
 
 # MongoDB (optional — leave blank to use in-memory demo mode)
 MONGODB_URI=
 
 # Frontend URL (for CORS)
 FRONTEND_URL=http://localhost:8000
+
+# File uploads
+PUBLIC_DIR=./public
+MAX_FILE_SIZE=5242880
+ALLOWED_FILE_TYPES=image/jpeg,image/png,image/gif,image/webp
 ```
 
 Copy `frontend/.env.example` to `frontend/.env`:
@@ -256,7 +284,7 @@ MongoDB Atlas free tier: https://www.mongodb.com/atlas
 |---|---|
 | `/` | Home — hero + featured products + categories + shops |
 | `/products` | All products (filter + sort + pagination) |
-| `/product/:id` | Product detail |
+| `/product/:id` | Product detail + reviews |
 | `/categories` | Category grid |
 | `/category/:id` | Products in a category |
 | `/shops` | All shops |
@@ -284,7 +312,7 @@ MongoDB Atlas free tier: https://www.mongodb.com/atlas
 | **In-memory DB** | mongodb-memory-server (dev/demo) |
 | **Auth** | JWT + bcryptjs |
 | **File uploads** | Multer |
-| **Frontend framework** | Vue 3 (Composition API) |
+| **Frontend framework** | Vue 3 (Options API) |
 | **Build tool** | Vite 2 |
 | **Styling** | Tailwind CSS + DaisyUI |
 | **State management** | Pinia |
@@ -301,6 +329,27 @@ MongoDB Atlas free tier: https://www.mongodb.com/atlas
 - Touch-friendly cards and buttons
 - Full-screen search overlay
 - PWA manifest (`public/manifest.json`)
+- Mobile-first viewport meta tag (prevents zoom on input focus on iOS)
+
+---
+
+## 🖥️ Available Scripts
+
+### Backend
+```bash
+cd backend
+npm start        # Start server (production)
+npm run dev      # Start server (development)
+npm run watch    # Start with auto-reload on file changes
+```
+
+### Frontend
+```bash
+cd frontend
+npx vite dev --port 8000   # Dev server with hot reload
+npx vite build             # Build for production → dist/
+node serve.js              # Serve production build
+```
 
 ---
 
